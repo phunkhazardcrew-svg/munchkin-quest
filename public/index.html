@@ -7,7 +7,6 @@
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<!-- ═══ SCREENS ════════════════════════════════════ -->
 
 <!-- HOME -->
 <div id="screen-home" class="screen active">
@@ -29,35 +28,42 @@
   <div class="lobby-header">
     <h2>🏰 Lobby</h2>
     <div class="room-code-box">
-      <span>Raumcode:</span>
+      <span>Code:</span>
       <strong id="lbl-code">—</strong>
       <button id="btn-copy-link" class="btn-icon" title="Link kopieren">🔗</button>
     </div>
   </div>
   <div id="lobby-players" class="player-list"></div>
-  <div id="lobby-status" class="status-msg">Warte auf Spieler... (min. 2)</div>
+  <div id="lobby-status" class="status-msg">Warte auf Spieler...</div>
+
+  <!-- DEV MODE BOX -->
+  <div id="dev-mode-box" class="dev-box hidden">
+    <div class="dev-title">🤖 Entwickler-Modus</div>
+    <div class="dev-desc">3 KI-Spieler hinzufügen um solo zu testen</div>
+    <div class="npc-preview">
+      <span class="npc-tag">🧙 Aldric <em>Strategisch</em></span>
+      <span class="npc-tag">⚔️ Zara <em>Strategisch</em></span>
+      <span class="npc-tag">🎲 Glitch <em>Zufällig</em></span>
+    </div>
+    <button id="btn-add-npcs" class="btn btn-dev">🤖 NPCs hinzufügen</button>
+  </div>
+
   <button id="btn-start" class="btn btn-primary hidden">🎮 Spiel starten!</button>
   <div id="lobby-error" class="error-msg hidden"></div>
 </div>
 
 <!-- GAME -->
 <div id="screen-game" class="screen hidden">
-  <!-- Top-Bar -->
   <div id="game-topbar">
     <span id="lbl-round">Runde 1</span>
     <span id="lbl-phase">Phase: —</span>
     <span id="lbl-current">Am Zug: —</span>
   </div>
-
-  <!-- Dungeon-Board (Canvas) -->
   <div id="board-wrap">
     <canvas id="dungeon-canvas"></canvas>
+    <div id="board-hint" class="board-hint">👆 Tippe auf angrenzende Kachel zum Bewegen</div>
   </div>
-
-  <!-- Spieler-Leiste -->
   <div id="players-bar"></div>
-
-  <!-- Aktions-Panel -->
   <div id="action-panel">
     <div id="action-buttons"></div>
     <div id="hand-area">
@@ -66,20 +72,18 @@
     </div>
   </div>
 
-  <!-- Kampf-Modal -->
+  <!-- Kampf Modal -->
   <div id="combat-modal" class="modal hidden">
     <div class="modal-content">
       <h3 id="cbt-title">⚔️ Kampf!</h3>
       <div id="cbt-monster"></div>
       <div id="cbt-strengths"></div>
+      <div id="cbt-log" class="cbt-log"></div>
       <div id="cbt-buttons"></div>
     </div>
   </div>
 
-  <!-- Log -->
-  <div id="game-log">
-    <div id="log-entries"></div>
-  </div>
+  <div id="game-log"><div id="log-entries"></div></div>
 </div>
 
 <!-- WINNER -->
@@ -92,7 +96,6 @@
   </div>
 </div>
 
-<!-- ═══ SCRIPTS ════════════════════════════════════ -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/client.js"></script>
 </body>
