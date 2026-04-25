@@ -311,3 +311,82 @@ input[type=text]::placeholder { color: var(--muted); }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── DEV MODE ────────────────────────────────────── */
+.dev-box {
+  margin: 0 20px 12px;
+  background: linear-gradient(135deg, #1a1a35, #16213e);
+  border: 1px dashed #4a4a8a;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dev-title { font-weight: 700; color: var(--gold); font-size: 14px; }
+.dev-desc  { font-size: 12px; color: var(--muted); }
+.npc-preview { display: flex; gap: 6px; flex-wrap: wrap; }
+.npc-tag {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+.npc-tag em { color: var(--muted); font-style: normal; }
+.btn-dev {
+  background: #2a2a5a;
+  border: 1px solid #4a4a8a;
+  color: var(--text);
+  margin-top: 4px;
+}
+.btn-dev:hover { background: #3a3a7a; }
+
+/* NPC-Chip Styling */
+.player-chip.is-npc { border-color: #4a4a8a; opacity: .85; }
+.player-chip.is-npc .chip-name { color: var(--muted); }
+
+/* Board Hint */
+.board-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22,33,62,.9);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity .5s;
+}
+
+/* Combat log inside modal */
+.cbt-log {
+  max-height: 60px;
+  overflow-y: auto;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+/* NPC turn indicator */
+.npc-turn-overlay {
+  position: fixed;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(74,74,138,.95);
+  border: 1px solid #6a6aaa;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #c8c8ff;
+  z-index: 50;
+  animation: fadeIn .3s ease;
+  pointer-events: none;
+}
