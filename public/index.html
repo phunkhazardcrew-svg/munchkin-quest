@@ -2,97 +2,120 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🎲 Munchkin Quest Online</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>🎲 Munchkin Quest</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<!-- HOME -->
+<!-- ══ HOME ════════════════════════════════════════ -->
 <div id="screen-home" class="screen active">
   <div class="logo">🎲</div>
   <h1>Munchkin Quest</h1>
-  <p class="subtitle">Online Multiplayer · 2–6 Spieler</p>
+  <p class="subtitle">Online · 2–6 Spieler</p>
   <div class="card">
-    <input id="inp-name" type="text" maxlength="20" placeholder="Dein Heldenname..." autocomplete="off">
+    <input id="inp-name" type="text" maxlength="20" placeholder="Heldenname..." autocomplete="off">
     <button id="btn-create" class="btn btn-primary">⚔️ Dungeon erstellen</button>
-    <div class="divider">— oder —</div>
-    <input id="inp-code" type="text" maxlength="6" placeholder="Raumcode (6 Zeichen)..." autocomplete="off" style="text-transform:uppercase">
+    <div class="divider">— oder beitreten —</div>
+    <input id="inp-code" type="text" maxlength="6" placeholder="Raumcode..." autocomplete="off" style="text-transform:uppercase;letter-spacing:4px">
     <button id="btn-join" class="btn btn-secondary">🚪 Beitreten</button>
   </div>
   <div id="home-error" class="error-msg hidden"></div>
 </div>
 
-<!-- LOBBY -->
-<div id="screen-lobby" class="screen hidden">
+<!-- ══ LOBBY ═══════════════════════════════════════ -->
+<div id="screen-lobby" class="screen">
   <div class="lobby-header">
-    <h2>🏰 Lobby</h2>
+    <h2 style="font-size:16px">🏰 Lobby</h2>
     <div class="room-code-box">
-      <span>Code:</span>
+      <span style="font-size:11px;color:var(--muted)">Code:</span>
       <strong id="lbl-code">—</strong>
-      <button id="btn-copy-link" class="btn-icon" title="Link kopieren">🔗</button>
+      <button id="btn-copy-link" class="btn-icon">🔗</button>
     </div>
   </div>
   <div id="lobby-players" class="player-list"></div>
   <div id="lobby-status" class="status-msg">Warte auf Spieler...</div>
-
-  <!-- DEV MODE BOX -->
   <div id="dev-mode-box" class="dev-box hidden">
-    <div class="dev-title">🤖 Entwickler-Modus</div>
-    <div class="dev-desc">3 KI-Spieler hinzufügen um solo zu testen</div>
+    <div class="dev-title">🤖 Dev-Modus — Solo testen</div>
     <div class="npc-preview">
       <span class="npc-tag">🧙 Aldric <em>Strategisch</em></span>
       <span class="npc-tag">⚔️ Zara <em>Strategisch</em></span>
       <span class="npc-tag">🎲 Glitch <em>Zufällig</em></span>
     </div>
-    <button id="btn-add-npcs" class="btn btn-dev">🤖 NPCs hinzufügen</button>
+    <button id="btn-add-npcs" class="btn btn-dev">🤖 3 NPCs hinzufügen</button>
   </div>
-
-  <button id="btn-start" class="btn btn-primary hidden">🎮 Spiel starten!</button>
+  <div class="lobby-actions">
+    <button id="btn-start" class="btn btn-primary hidden">🎮 Spiel starten!</button>
+  </div>
   <div id="lobby-error" class="error-msg hidden"></div>
 </div>
 
-<!-- GAME -->
-<div id="screen-game" class="screen hidden">
-  <div id="game-topbar">
-    <span id="lbl-round">Runde 1</span>
-    <span id="lbl-phase">Phase: —</span>
-    <span id="lbl-current">Am Zug: —</span>
+<!-- ══ GAME ════════════════════════════════════════ -->
+<div id="screen-game" class="screen">
+
+  <!-- Row 1: HUD -->
+  <div id="hud-bar" class="phase-roll">
+    <span id="hud-phase">🎲 Würfeln</span>
+    <span id="hud-current">—</span>
+    <span id="hud-round">R1</span>
   </div>
+
+  <!-- Row 2: Board -->
   <div id="board-wrap">
     <canvas id="dungeon-canvas"></canvas>
-    <div id="board-hint" class="board-hint">👆 Tippe auf angrenzende Kachel zum Bewegen</div>
+    <div id="board-hint">🏃 Tippe auf grüne Felder zum Bewegen</div>
+    <div id="npc-overlay">🤖 KI denkt nach...</div>
   </div>
-  <div id="players-bar"></div>
-  <div id="action-panel">
+
+  <!-- Row 3: Bottom Panel -->
+  <div id="bottom-panel">
+    <div id="players-bar"></div>
     <div id="action-buttons"></div>
-    <div id="hand-area">
-      <div class="hand-label">🃏 Handkarten (<span id="hand-count">0</span>)</div>
+    <div id="hand-wrap">
+      <div class="hand-header">
+        <span class="hand-label">🃏 Hand (<span id="hand-count">0</span>)</span>
+        <button id="hand-toggle">▼</button>
+      </div>
       <div id="hand-cards"></div>
     </div>
   </div>
 
-  <!-- Kampf Modal -->
+  <!-- Row 4: Log-Strip -->
+  <div id="log-strip">
+    <span>📜</span>
+    <span id="log-latest">—</span>
+    <button id="log-toggle">Alle</button>
+  </div>
+
+  <!-- Full Log Panel (slide-up) -->
+  <div id="log-panel">
+    <button id="log-close">✕ Schließen</button>
+    <div id="log-entries"></div>
+  </div>
+
+  <!-- Combat Modal -->
   <div id="combat-modal" class="modal hidden">
-    <div class="modal-content">
-      <h3 id="cbt-title">⚔️ Kampf!</h3>
+    <div class="modal-sheet">
+      <div class="cbt-handle"></div>
+      <div id="cbt-title">⚔️ Kampf!</div>
       <div id="cbt-monster"></div>
-      <div id="cbt-strengths"></div>
-      <div id="cbt-log" class="cbt-log"></div>
+      <div id="cbt-vs"></div>
+      <div id="cbt-helpers"></div>
       <div id="cbt-buttons"></div>
     </div>
   </div>
 
-  <div id="game-log"><div id="log-entries"></div></div>
 </div>
 
-<!-- WINNER -->
-<div id="screen-winner" class="screen hidden">
+<!-- ══ WINNER ══════════════════════════════════════ -->
+<div id="screen-winner" class="screen">
   <div class="winner-content">
-    <div style="font-size:80px">🏆</div>
+    <div style="font-size:72px">🏆</div>
     <h1 id="winner-name">— gewinnt!</h1>
-    <p>Stufe 10 erreicht!</p>
-    <button id="btn-new-game" class="btn btn-primary">Neues Spiel</button>
+    <p>Stufe 10 erreicht — Dungeon bezwungen!</p>
+    <button id="btn-new-game" class="btn btn-primary">🎲 Neues Spiel</button>
   </div>
 </div>
 
