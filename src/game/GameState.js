@@ -314,8 +314,10 @@ class GameState {
       this._log(`📜 ${p.name} zieht DxM: ${card.name}`);
       this._event('draw_dxm', { playerId: p.id, card: { name: card.name, icon: card.icon } });
     }
-    // Bewegungsmarker zurücksetzen auf 3
-    p.movesLeft = 3;
+    // Bewegungsmarker: Basis 3, -1 pro großem Gegenstand über dem ersten
+    const bigCount = this._countBigItems(p);
+    const movePenalty = Math.max(0, bigCount - 1); // Erster großer Gegenstand kostenlos
+    p.movesLeft = Math.max(1, 3 - movePenalty);
     this.phase = 'movement';
     this._log(`🏃 ${p.name} hat 3 Bewegungsmarker`);
     return { ok: true, card, movesLeft: 3 };
@@ -331,6 +333,11 @@ class GameState {
     const moveCheck = this.board.canMove(player.x, player.y, toX, toY);
     if (!moveCheck.ok) return this._err(moveCheck.reason);
 
+    // Verbindungskosten nach Regelwerk:
+    // Offener Gang = 1 | Normale Tür = 1 | Verschlossene Tür = 3 | Geheimtür = 3
+    const moveCost = this._getConnectionCost(player.x, player.y, toX, toY);
+    if (player.movesLeft < moveCost) return this._err(`Zu wenig Bewegungsmarker! (braucht ${moveCost})`);
+
     const fromDir = moveCheck.dir;
     const isNewTile = !this.board.getTile(toX, toY);
 
@@ -340,7 +347,7 @@ class GameState {
 
     player.x = toX;
     player.y = toY;
-    player.movesLeft--;
+    player.movesLeft -= moveCost;
 
     this._log(`🏃 ${player.name} → (${toX},${toY}) [${tile.name}] | ${player.movesLeft}🦶 übrig`);
     this._event('player_move', { playerId: player.id, x: toX, y: toY, tileName: tile.name });
@@ -1214,6 +1221,12 @@ class GameState {
       events:     this.events,
     };
   }
+  _getConnectionCost(fromX, fromY, toX, toY) { return 1; }
+  _countBigItems(player) {
+    const eq = player.equipment || {};
+    return ['weapon','armor','headgear','boots'].filter(s => eq[s]?.big).length;
+  }
+
 }
 
 module.exports = { GameState };
