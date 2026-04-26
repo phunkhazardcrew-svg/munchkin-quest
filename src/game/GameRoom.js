@@ -50,17 +50,15 @@ class NPCController {
         return { type:'skip_to_search' };
       }
       case 'combat':
+      case 'combat_roll':
         if (state.combat?.fighterId === me.id) {
-          // Trank spielen wenn möglich
+          // Trank spielen wenn nötig
           const potion = (state.myHand||[]).find(c => c.type === 'potion' && c.bonus > 0);
-          if (potion && state.combat.monsters[0]?.level > me.level + 3) {
+          if (potion && (state.combat.monsters[0]?.level||0) > (me.level||1) + 3) {
             return { type:'play_card', cardId: potion.uid||potion.id };
           }
-          return { type:'announce_roll' };
+          return { type:'roll_combat' };
         }
-        return null;
-      case 'combat_roll':
-        if (state.combat?.fighterId === me.id) return { type:'roll_combat' };
         return null;
       case 'flee':
         if (state.combat?.fighterId === me.id) {
@@ -123,12 +121,10 @@ class NPCController {
         }
         return { type:'skip_to_search' };
       case 'combat':
-        if (state.combat?.fighterId === me.id) {
-          return Math.random() < 0.7 ? { type:'announce_roll' } : { type:'flee', targetTile:{x:0,y:0} };
-        }
-        return null;
       case 'combat_roll':
-        if (state.combat?.fighterId === me.id) return { type:'roll_combat' };
+        if (state.combat?.fighterId === me.id) {
+          return Math.random() < 0.75 ? { type:'roll_combat' } : { type:'flee', targetTile:{x:0,y:0} };
+        }
         return null;
       case 'flee':
         if (state.combat?.fighterId === me.id) return { type:'flee', targetTile:{x:0,y:0} };
