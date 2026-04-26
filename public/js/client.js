@@ -11,6 +11,8 @@ const STATE = {
   camera: { x: 0, y: 0, scale: 1.5 }, drag: { active: false, sx: 0, sy: 0 },
   prevPhase: '', prevLevel: 1, _didAutoCenter: false,
   _animFrame: null, _animNeeded: false, _animT: 0,
+  _animLock: false,   // UI-Update gesperrt während Animation
+  _pendingState: null // Gepuffertes Game-State während Animation
 };
 const TILE_PX = 96; // px pro Tile auf 1.0 zoom
 
@@ -77,8 +79,48 @@ function setupSocket() {
 
   s.on('game_update', gameState => {
     const prev = STATE.game;
-    STATE.game = gameState;
     STATE.phase = gameState.phase;
+
+    // Events checken: Neue Animation nötig?
+    const prevEvents = prev?.events || [];
+    const newEvents  = (gameState.events || []).filter(e =>
+      !prevEvents.find(pe => pe.ts === e.ts)
+    );
+
+    const rollEvt   = newEvents.find(e => e.type === 'combat_roll');
+    const fleeEvt   = newEvents.find(e => e.type === 'flee_roll');
+    const searchEvt = newEvents.find(e => e.type === 'search_roll');
+    const badEvt    = newEvents.find(e => e.type === 'bad_stuff');
+    const lvlEvt    = newEvents.find(e => e.type === 'level_up' && e.data?.playerId === STATE.myId);
+    const bossEvt   = newEvents.find(e => e.type === 'boss_spawn');
+    const curseEvt  = newEvents.find(e => e.type === 'curse'    && e.data?.playerId === STATE.myId);
+    const deathEvt  = newEvents.find(e => e.type === 'player_death');
+
+    // Animationen die UI-Update blockieren (Würfeln)
+    if (rollEvt) {
+      STATE._animLock   = true;
+      STATE._pendingState = gameState;
+      STATE.game = prev; // UI zeigt noch alte State während Anim
+      showDiceAnimation(rollEvt.data, () => {
+        // Nach Animation: neuen State anwenden
+        STATE._animLock   = false;
+        STATE.game        = STATE._pendingState || gameState;
+        STATE._pendingState = null;
+        handleAnimations(prev, STATE.game);
+        renderGame(STATE.game);
+      });
+      return;
+    }
+
+    // Nicht-blockierende Animationen (Toast + Overlay)
+    if (fleeEvt)   showFleeAnimation(fleeEvt.data);
+    if (searchEvt) showSearchAnimation(searchEvt.data);
+    if (badEvt)    showBadStuffAnimation(badEvt.data);
+    if (curseEvt)  toast(`💀 Verflucht: ${curseEvt.data.curse?.name || '?'}`, 'error');
+    if (deathEvt && deathEvt.data?.playerId === STATE.myId) showDeathAnimation();
+    if (bossEvt)   showBossIntro(bossEvt.data.boss);
+
+    STATE.game = gameState;
     handleAnimations(prev, gameState);
     renderGame(gameState);
   });
@@ -997,37 +1039,20 @@ function calcEquipBonus(me) {
 // ══════════════════════════════════════════════════════════════════
 function handleAnimations(prev, next) {
   if (!prev) return;
-
-  // Phase gewechselt?
-  const phaseChanged = prev.phase !== next.phase;
-  if (phaseChanged && next.currentPlayerId === STATE.myId) {
+  // Phasenübergang-Overlay (nur eigener Zug)
+  if (prev.phase !== next.phase && next.currentPlayerId === STATE.myId) {
     showPhaseOverlay(next.phase);
   }
-
-  // Level-Up?
+  // Level-Up
   const myPrev = prev.players?.find(p => p.id === STATE.myId);
   const myNext = next.players?.find(p => p.id === STATE.myId);
   if (myPrev && myNext && myNext.level > myPrev.level) {
     showLevelUp(myNext.level);
   }
-
-  // Würfelwurf?
-  const events = next.events || [];
-  const rollEvt = events.find(e => e.type === 'combat_roll' && (!prev.events || !prev.events.find(pe => pe.type==='combat_roll' && pe.ts===e.ts)));
-  if (rollEvt) {
-    showDiceAnimation(rollEvt.data);
-  }
-
-  // Boss spawned?
-  const bossEvt = events.find(e => e.type === 'boss_spawn' && (!prev.events || !prev.events.find(pe => pe.type==='boss_spawn' && pe.ts===e.ts)));
-  if (bossEvt) {
-    showBossIntro(bossEvt.data.boss);
-  }
-
-  // Fluch?
-  const curseEvt = events.find(e => e.type === 'curse' && e.data.playerId === STATE.myId && (!prev.events || !prev.events.find(pe => pe.type==='curse' && pe.ts===e.ts)));
-  if (curseEvt) {
-    toast(`💀 Verflucht: ${curseEvt.data.curse.name}`, 'error');
+  // Hinweis-Toast für NPC-Aktionen
+  const curPlayer = next.players?.find(p => p.id === next.currentPlayerId);
+  if (next.currentPlayerId !== STATE.myId && curPlayer && prev.phase !== next.phase) {
+    if (next.phase === 'combat') toast(`⚔️ ${curPlayer.name} kämpft!`, 'info');
   }
 }
 
@@ -1045,54 +1070,146 @@ function showPhaseOverlay(phase) {
 }
 
 // ── WÜRFEL-ANIMATION ──────────────────────────────────────────────
-function showDiceAnimation(data) {
+function showDiceAnimation(data, onComplete) {
   const overlay = document.getElementById('dice-overlay');
-  if (!overlay) return;
+  if (!overlay) { if (onComplete) onComplete(); return; }
   const container = document.querySelector('.dice-container');
   const verdictEl = document.getElementById('dice-verdict');
-  if (!container || !verdictEl) return;
+  if (!container || !verdictEl) { if (onComplete) onComplete(); return; }
 
   overlay.classList.remove('hidden');
+  verdictEl.classList.add('hidden');
 
-  const pRoll = data.playerRolls;
-  const mRolls = data.monsterRolls;
+  const pRoll  = data.playerRolls;
+  const mRolls = data.monsterRolls || [];
+  const ANIM_ROLL = 900;   // Würfelrotation
+  const ANIM_HOLD = 1400;  // Ergebnis anzeigen
+  const ANIM_CLOSE= 600;   // Ausblenden
+  const TOTAL = ANIM_ROLL + ANIM_HOLD + ANIM_CLOSE;
 
+  // Phase 1: Würfel zeigen mit Fragezeichen
   container.innerHTML = `
     <div class="dice-row">
-      <span class="dice-row-label">Held</span>
-      <div class="dice rolling" id="da1">${pRoll?.roll || '?'}</div>
-      <div class="dice-total" style="font-size:28px;color:var(--blue)">= ${pRoll?.total || '?'}</div>
+      <span class="dice-row-label">⚔️ Held</span>
+      <div class="dice rolling">?</div>
+      <div class="dice-total" style="color:var(--blue)">?</div>
     </div>
     <div class="dice-vs">VS</div>
     <div class="dice-row">
-      <span class="dice-row-label">Monster</span>
-      ${(mRolls || []).map(mr =>
-        `<div class="dice rolling">${mr.rolls?.[0] || '?'}</div>`).join('')}
-      <div class="dice-total" style="font-size:28px;color:var(--accent)">= ${data.monsterTotal || '?'}</div>
+      <span class="dice-row-label">👹 Monster</span>
+      ${mRolls.map(() => '<div class="dice rolling">?</div>').join('')}
+      <div class="dice-total" style="color:var(--accent)">?</div>
     </div>`;
 
-  // Dice roll animation
-  overlay.querySelectorAll('.dice').forEach(d => {
-    d.classList.add('rolling');
-    setTimeout(() => d.classList.remove('rolling'), 700);
-  });
-
+  // Phase 2: Nach Roll-Animation Ergebnis einblenden
   setTimeout(() => {
-    if (data.playerWins) {
-      verdictEl.textContent = '⚔️ SIEG!';
-      verdictEl.className = 'dice-verdict win';
-    } else {
-      verdictEl.textContent = '💀 NIEDERLAGE!';
-      verdictEl.className = 'dice-verdict lose';
-    }
-    verdictEl.classList.remove('hidden');
-  }, 750);
+    overlay.querySelectorAll('.dice').forEach(d => d.classList.remove('rolling'));
+    container.innerHTML = `
+      <div class="dice-row">
+        <span class="dice-row-label">⚔️ Held</span>
+        <div class="dice">${pRoll?.roll ?? '?'}</div>
+        <div class="dice-total" style="color:var(--blue)">= ${pRoll?.total ?? '?'}</div>
+      </div>
+      <div class="dice-vs">VS</div>
+      <div class="dice-row">
+        <span class="dice-row-label">👹 Monster</span>
+        ${mRolls.map(mr => `<div class="dice">${(mr.rolls||[])[0] ?? '?'}</div>`).join('')}
+        <div class="dice-total" style="color:var(--accent)">= ${data.monsterTotal ?? '?'}</div>
+      </div>`;
 
+    verdictEl.textContent = data.playerWins ? '⚔️ SIEG!' : '💀 NIEDERLAGE!';
+    verdictEl.className   = `dice-verdict ${data.playerWins ? 'win' : 'lose'}`;
+    verdictEl.classList.remove('hidden');
+  }, ANIM_ROLL);
+
+  // Phase 3: Ausblenden + Callback
   setTimeout(() => {
     overlay.classList.add('hidden');
     verdictEl.classList.add('hidden');
     container.innerHTML = '';
-  }, 2600);
+    if (onComplete) onComplete();
+  }, ANIM_ROLL + ANIM_HOLD);
+
+  setTimeout(() => overlay.classList.add('hidden'), TOTAL);
+}
+
+// ── FLUCHT-ANIMATION ──────────────────────────────────────────────
+function showFleeAnimation(data) {
+  const isMe = data.playerId === STATE.myId;
+  if (!isMe) return; // Nur eigene Flucht animieren
+  const success = data.success;
+  const overlay = _makeAnimOverlay();
+  overlay.innerHTML = `
+    <div style="text-align:center;animation:phaseBounce .4s ease">
+      <div style="font-size:72px">${success ? '💨' : '🔒'}</div>
+      <div style="font-size:28px;font-weight:900;color:${success ? 'var(--green)' : 'var(--red)'}">
+        ${success ? 'Entkommen!' : 'Erwischt!'}
+      </div>
+      <div style="font-size:16px;color:var(--muted);margin-top:8px">
+        ${data.isHalfling ? '🌿 Halbling: Automatisch!' : `W6 = ${data.roll} (braucht ${data.needed}+)`}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 2000);
+  if (!success) toast('💀 Schlimme Dinge!', 'error');
+}
+
+// ── SUCHE-ANIMATION ───────────────────────────────────────────────
+function showSearchAnimation(data) {
+  const isMe = data.playerId === STATE.myId;
+  if (!isMe) return;
+  const roll = data.roll;
+  const overlay = _makeAnimOverlay();
+  const gold = roll <= 1 ? '⚠️ Monster!' : roll <= 4 ? '💰 Gold gefunden!' : '💎 Schatz!';
+  overlay.innerHTML = `
+    <div style="text-align:center;animation:phaseBounce .4s ease">
+      <div style="font-size:60px">🔍</div>
+      <div style="font-size:20px;font-weight:700;color:var(--gold);margin:8px 0">${gold}</div>
+      <div style="font-size:14px;color:var(--muted)">Würfel: ${data.roll - (data.bonus||0)} + ${data.bonus||0} = <b>${data.roll}</b></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 1800);
+}
+
+// ── BAD STUFF ANIMATION ───────────────────────────────────────────
+function showBadStuffAnimation(data) {
+  if (data.playerId !== STATE.myId) return;
+  const overlay = _makeAnimOverlay('#8b0000cc');
+  overlay.innerHTML = `
+    <div style="text-align:center;animation:phaseBounce .3s ease">
+      <div style="font-size:64px">💀</div>
+      <div style="font-size:18px;font-weight:900;color:#ff6666">SCHLIMME DINGE!</div>
+      <div style="font-size:14px;color:#ffaaaa;margin-top:8px;max-width:240px;text-align:center">
+        ${data.badStuff || '?'}
+      </div>
+      <div style="font-size:12px;color:#888;margin-top:4px">${data.monsterName || ''}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 2500);
+  toast(`💀 ${data.badStuff}`, 'error');
+}
+
+// ── TOD-ANIMATION ─────────────────────────────────────────────────
+function showDeathAnimation() {
+  const overlay = _makeAnimOverlay('#000000cc');
+  overlay.innerHTML = `
+    <div style="text-align:center;animation:phaseBounce .5s ease">
+      <div style="font-size:80px">💀</div>
+      <div style="font-size:28px;font-weight:900;color:var(--red)">DU BIST TOT!</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:8px">
+        Verliere 1 Stufe · Nächste Runde: Eingang · 300 Gold · 4 Karten
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 3000);
+}
+
+// ── OVERLAY HELFER ────────────────────────────────────────────────
+function _makeAnimOverlay(bg = 'rgba(4,4,12,.9)') {
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;inset:0;background:${bg};display:flex;
+    align-items:center;justify-content:center;z-index:600;pointer-events:none`;
+  return el;
 }
 
 // ── LEVEL-UP ──────────────────────────────────────────────────────
