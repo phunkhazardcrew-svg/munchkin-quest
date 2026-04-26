@@ -314,13 +314,25 @@ class GameState {
       this._log(`📜 ${p.name} zieht DxM: ${card.name}`);
       this._event('draw_dxm', { playerId: p.id, card: { name: card.name, icon: card.icon } });
     }
+
     // Bewegungsmarker: Basis 3, -1 pro großem Gegenstand über dem ersten
     const bigCount = this._countBigItems(p);
-    const movePenalty = Math.max(0, bigCount - 1); // Erster großer Gegenstand kostenlos
+    const movePenalty = Math.max(0, bigCount - 1);
     p.movesLeft = Math.max(1, 3 - movePenalty);
+
+    // ── REGELWERK S.6: „Zugbeginn in einem Raum mit einem Monster" ──────
+    // Befindet sich zu Beginn des Zuges ein Monster im selben Raum,
+    // muss der Spieler kämpfen — OHNE Bewegungsmarker zu verbrauchen.
+    const currentTile = this.board.getTile(p.x, p.y);
+    if (currentTile && currentTile.monsters && currentTile.monsters.length > 0) {
+      this._log(`👹 Monster im Raum zu Zugbeginn — Kampf beginnt sofort!`);
+      this.phase = 'movement'; // Erst movement setzen, damit combat korrekt weitermacht
+      return this._initCombat(p, [...currentTile.monsters], currentTile);
+    }
+
     this.phase = 'movement';
-    this._log(`🏃 ${p.name} hat 3 Bewegungsmarker`);
-    return { ok: true, card, movesLeft: 3 };
+    this._log(`🏃 ${p.name} hat ${p.movesLeft} Bewegungsmarker`);
+    return { ok: true, card, movesLeft: p.movesLeft };
   }
 
   // ══════════════════════════════════════════════════════════════
