@@ -8,10 +8,10 @@
 const STATE = {
   socket: null, myId: null, roomCode: null, game: null,
   selectedCard: null, phase: '', dpr: window.devicePixelRatio || 1,
-  camera: { x: 0, y: 0, scale: 1 }, drag: { active: false, sx: 0, sy: 0 },
+  camera: { x: 0, y: 0, scale: 1.4 }, drag: { active: false, sx: 0, sy: 0 },
   prevPhase: '', prevLevel: 1,
 };
-const TILE_PX = 90; // px pro Tile auf 1.0 zoom
+const TILE_PX = 88; // px pro Tile auf 1.0 zoom
 
 // ── SETUP ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -49,7 +49,14 @@ function setupSocket() {
 
   s.on('lobby_update', lobbyState => updateLobby(lobbyState));
 
-  s.on('game_started', () => { showScreen('game'); resizeCanvas(); });
+  s.on('game_started', () => {
+    showScreen('game');
+    resizeCanvas();
+    // Kamera auf Eingang zentrieren
+    STATE.camera.x = 0;
+    STATE.camera.y = 0;
+    STATE.camera.scale = 1.4;
+  });
 
   s.on('game_update', gameState => {
     const prev = STATE.game;
@@ -66,14 +73,21 @@ function setupSocket() {
     setTimeout(() => showScreen('winner'), 800);
   });
 
-  s.on('action_error', ({ message }) => toast(message, 'error'));
+  s.on('action_error', ({ message }) => {
+    console.error('[ACTION ERROR]', message);
+    toast('❌ ' + message, 'error');
+  });
+  s.on('connect_error', (err) => console.error('[CONNECT ERROR]', err));
   s.on('error', ({ message }) => {
     toast(message, 'error');
     showError(message);
   });
 }
 
-function send(action) { STATE.socket?.emit('game_action', action); }
+function send(action) {
+  console.log('[SEND]', action.type, JSON.stringify(action).slice(0,80));
+  STATE.socket?.emit('game_action', action);
+}
 
 // ── HOME UI ───────────────────────────────────────────────────────
 function setupHomeUI() {
@@ -235,6 +249,13 @@ function renderGame(g) {
   const W = wrap.getBoundingClientRect().width;
   const H = wrap.getBoundingClientRect().height;
   ctx.clearRect(0, 0, W, H);
+  // Auto-Center auf Eingang wenn Karte noch fast leer
+  const tileCount = Object.keys(g?.board?.tiles || {}).length;
+  if (tileCount <= 2 && !STATE._didAutoCenter) {
+    STATE._didAutoCenter = true;
+    STATE.camera.x = 0;
+    STATE.camera.y = -30;
+  }
 
   // Dungeon-Hintergrund
   ctx.fillStyle = '#04040c';
@@ -399,10 +420,13 @@ function drawPlayer(p, sc, isMe) {
   const allHere = STATE.game?.players.filter(pl => pl.x === p.x && pl.y === p.y && pl.alive) || [];
   const idx = allHere.findIndex(pl => pl.id === p.id);
   const total = allHere.length;
-  const offsetX = total > 1 ? (idx - (total - 1) / 2) * sc * 0.26 : 0;
+  // 2x2 Grid für mehrere Spieler
+  const col = idx % 2, row = Math.floor(idx / 2);
+  const offsetX = total > 1 ? (col - 0.5) * sc * 0.38 : 0;
+  const offsetY = total > 2 ? (row - 0.5) * sc * 0.38 : 0;
   const px = s.x + offsetX;
-  const py = s.y - sc * 0.05;
-  const r = Math.max(12, sc * 0.22);
+  const py = s.y + offsetY - sc * 0.02;
+  const r = Math.max(10, sc * 0.18);
 
   ctx.save();
   ctx.shadowColor = isMe ? p.color : 'rgba(0,0,0,.5)';
@@ -655,32 +679,23 @@ function updateActionPanel(g, me) {
       }
       break;
     case 'combat':
-      if (g.combat?.fighterId === STATE.myId) {
-        if (!g.combat.announced) {
-          addBtn(btns, '⚔️ "Ich würfle jetzt!"', 'primary', () => send({ type:'announce_roll' }));
-          addBtn(btns, '💨 Fliehen', 'gray', () => openFleePanel(g));
-        } else {
-          addBtn(btns, '🎲 WÜRFELN!', 'primary', () => send({ type:'roll_combat' }));
-        }
-        // Tränke zeigen
-        const potions = (g.myHand || []).filter(c => c.type === 'potion' && c.bonus > 0);
-        potions.forEach(p => {
-          addBtn(btns, `${p.icon} ${p.name} (+${p.bonus})`, 'green',
-            () => send({ type:'play_card', cardId: p.uid || p.id }));
-        });
-        // Zauberer: Karte abwerfen
-        if (me.class?.ability === 'wizard') {
-          addBtn(btns, '🧙 Karte für +3', 'purple', () => openWizardDiscard(g));
-        }
-      } else {
-        // Nicht-Kämpfer im Kampf
-        addBtn(btns, '🤝 Helfen', 'green', () => send({ type:'help_fight' }), g.combat?.helpers?.length > 0);
-        addBtn(btns, '😈 Behindern', 'primary', () => send({ type:'hinder', bonus:2 }));
-      }
-      break;
     case 'combat_roll':
       if (g.combat?.fighterId === STATE.myId) {
+        // Immer direkt WÜRFELN ermöglichen
         addBtn(btns, '🎲 WÜRFELN!', 'primary', () => send({ type:'roll_combat' }));
+        addBtn(btns, '💨 Fliehen', 'gray', () => openFleePanel(g));
+        // Tränke
+        const potions = (g.myHand || []).filter(c => c.type === 'potion' && c.bonus > 0);
+        potions.forEach(p => {
+          addBtn(btns, `${p.icon} +${p.bonus}`, 'green',
+            () => send({ type:'play_card', cardId: p.uid || p.id }));
+        });
+        if (me.class?.ability === 'wizard') {
+          addBtn(btns, '🧙 +3', 'purple', () => openWizardDiscard(g));
+        }
+      } else if (g.combat && !g.combat.resolved) {
+        addBtn(btns, '🤝 Helfen', 'green', () => send({ type:'help_fight' }), (g.combat?.helpers?.length||0) > 0);
+        addBtn(btns, '😈 Behindern', 'primary', () => send({ type:'hinder', bonus:2 }));
       }
       break;
     case 'flee':
@@ -897,20 +912,25 @@ function updateCombatModal(g, me) {
   if (cbtBtns) {
     cbtBtns.innerHTML = '';
     if (isMyFight && !c.resolved) {
-      if (!c.announced) {
-        addCbtBtn(cbtBtns, '⚔️ "Ich würfle jetzt!"', 'red',  () => send({ type:'announce_roll' }));
-        addCbtBtn(cbtBtns, '💨 Fliehen',              'gray', () => send({ type:'flee', targetTile:{x:0,y:0} }));
-      } else {
-        addCbtBtn(cbtBtns, '🎲 WÜRFELN!', 'red', () => send({ type:'roll_combat' }));
+      // Direkt würfeln — kein separater announce Schritt
+      addCbtBtn(cbtBtns, '🎲 WÜRFELN!', 'red', () => send({ type:'roll_combat' }));
+      if (!c.noFlee) {
+        addCbtBtn(cbtBtns, '💨 Fliehen', 'gray', () => send({ type:'flee', targetTile:{x:0,y:0} }));
       }
-    } else if (!c.resolved && c.fighterId !== STATE.myId) {
+      // Tränke
+      const pots = (STATE.game?.myHand||[]).filter(c=>c.type==='potion'&&c.bonus>0);
+      pots.forEach(p => {
+        addCbtBtn(cbtBtns, `${p.icon} ${p.name} (+${p.bonus})`, 'green',
+          () => send({ type:'play_card', cardId: p.uid||p.id }));
+      });
+    } else if (!c.resolved && !isMyFight) {
       const alreadyHelping = c.helpers?.find(h => h.id === STATE.myId);
-      if (!alreadyHelping && c.helpers?.length === 0) {
+      if (!alreadyHelping && (c.helpers?.length||0) === 0) {
         addCbtBtn(cbtBtns, '🤝 Helfen', 'blue', () => send({ type:'help_fight' }));
       }
-      addCbtBtn(cbtBtns, '😈 Behindern (+2 Monster)', 'gray', () => send({ type:'hinder', bonus:2 }));
+      addCbtBtn(cbtBtns, '😈 Behindern (+2)', 'gray', () => send({ type:'hinder', bonus:2 }));
     }
-    if (!c.resolved && g.phase === 'flee' && c.fighterId === STATE.myId) {
+    if (g.phase === 'flee' && c.fighterId === STATE.myId) {
       addCbtBtn(cbtBtns, '💨 Zum Eingang fliehen', 'gold', () => send({ type:'flee', targetTile:{x:0,y:0} }));
     }
   }
