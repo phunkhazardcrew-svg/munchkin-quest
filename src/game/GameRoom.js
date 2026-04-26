@@ -127,8 +127,7 @@ class NPCController {
         }
         return null;
       case 'flee':
-        if (state.combat?.fighterId === me.id) return { type:'flee', targetTile:{x:0,y:0} };
-        return null;
+        return { type:'flee', targetTile:{x:0,y:0} };
       case 'charity':  return { type:'charity_done' };
       default:         return null;
     }
@@ -188,7 +187,7 @@ class GameRoom {
 
   _startNPC() {
     this._stopNPC();
-    this._npcTimer = setInterval(() => this._tickNPC(), 1800);
+    this._npcTimer = setInterval(() => this._tickNPC(), 2500);
   }
   _stopNPC() {
     if (this._npcTimer) { clearInterval(this._npcTimer); this._npcTimer = null; }
@@ -201,11 +200,27 @@ class GameRoom {
     if (!ctrl) return;
 
     const state = this.gameState.getStateFor(currentId);
+    const phase = state.phase;
     const action = ctrl.decide(state, currentId);
     if (!action) return;
 
-    const result = this.gameState.handleAction(currentId, action);
-    if (result.ok && this._onBroadcast) this._onBroadcast(this);
+    // Verzögerungen je nach Aktion — Menschen Zeit zum Reagieren geben
+    const delay = this._getActionDelay(phase, action.type);
+    setTimeout(() => {
+      if (!this.gameState || this.gameState.winner) return;
+      const result = this.gameState.handleAction(currentId, action);
+      if (result.ok && this._onBroadcast) this._onBroadcast(this);
+    }, delay);
+  }
+
+  _getActionDelay(phase, actionType) {
+    if (actionType === 'roll_combat') return 3200;   // 3.2s: Mensch hat Zeit zu helfen
+    if (actionType === 'flee')        return 1500;   // 1.5s: Flucht
+    if (phase === 'combat')           return 2800;   // 2.8s im Kampf
+    if (phase === 'movement')         return 600;    // 0.6s bei Bewegung
+    if (phase === 'draw_dxm')         return 400;    // 0.4s beim Ziehen
+    if (phase === 'charity')          return 800;    // 0.8s Milde Gabe
+    return 700;
   }
 
   handleAction(socketId, action) {
