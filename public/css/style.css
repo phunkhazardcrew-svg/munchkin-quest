@@ -84,10 +84,10 @@ input[type=text]::placeholder{color:var(--muted)}
 .lobby-actions{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
 
 /* ── GAME LAYOUT ──────────────────────────────────── */
-#screen-game{display:grid;grid-template-rows:44px 1fr auto 28px;overflow:hidden}
+#screen-game{display:flex;flex-direction:column;overflow:hidden}
 
 /* ── HUD ──────────────────────────────────────────── */
-.hud{display:flex;align-items:center;padding:0 10px;gap:8px;background:var(--card);
+.hud{display:flex;align-items:center;padding:0 10px;gap:8px;height:44px;background:var(--card);
   border-bottom:3px solid var(--col-draw);transition:border-color .4s;flex-shrink:0;z-index:10}
 .hud[data-phase=movement]{border-color:var(--col-move)}
 .hud[data-phase=combat],.hud[data-phase=combat_roll]{border-color:var(--col-combat)}
@@ -104,7 +104,7 @@ input[type=text]::placeholder{color:var(--muted)}
 .hud-round{font-size:11px;color:var(--muted);flex-shrink:0}
 
 /* ── BOARD ────────────────────────────────────────── */
-#board-wrap{position:relative;overflow:hidden;background:#04040c;min-height:0}
+#board-wrap{position:relative;overflow:hidden;background:#04040c;min-height:0;flex:1}
 #dungeon-canvas{width:100%;height:100%;display:block;touch-action:none;user-select:none}
 .board-hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
   background:rgba(16,16,30,.9);border:1px solid var(--border);border-radius:20px;
@@ -175,8 +175,12 @@ input[type=text]::placeholder{color:var(--muted)}
 
 /* ── AKTIONS-PANEL ────────────────────────────────── */
 #action-panel{background:var(--surface);border-top:1px solid var(--border);
-  display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;max-height:190px}
-#action-buttons{display:flex;gap:5px;flex-wrap:wrap;padding:6px 8px 4px;flex-shrink:0;overflow-y:auto;max-height:90px}
+  display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;
+  max-height:min(210px, 35dvh)}
+#action-buttons{display:flex;gap:5px;flex-wrap:wrap;padding:6px 8px 4px;flex-shrink:0;
+  overflow-y:auto;max-height:min(96px, 30dvh)}
+#action-buttons::-webkit-scrollbar{height:3px}
+#action-buttons::-webkit-scrollbar-thumb{background:var(--border)}
 .act-btn{flex:1;min-width:76px;padding:10px 6px;background:var(--card);
   border:1px solid var(--border);border-radius:8px;color:var(--text);
   font-size:12px;font-weight:700;cursor:pointer;transition:all .12s;min-height:42px}
@@ -220,7 +224,7 @@ input[type=text]::placeholder{color:var(--muted)}
 
 /* ── LOG ──────────────────────────────────────────── */
 #log-strip{background:var(--bg);border-top:1px solid var(--border);padding:4px 10px;
-  font-size:10px;color:var(--muted);height:28px;overflow:hidden;display:flex;
+  font-size:10px;color:var(--muted);height:28px;min-height:28px;overflow:hidden;display:flex;
   align-items:center;gap:5px;flex-shrink:0}
 .log-latest-text{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .log-toggle-btn{background:none;border:1px solid var(--border);color:var(--muted);
