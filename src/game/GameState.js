@@ -253,7 +253,8 @@ class GameState {
 
       // ── PHASE: Fliehen ────────────────────────────────────
       case 'flee':
-        if (!isMyTurn || this.phase !== 'combat') return this._err('Jetzt nicht!');
+        if (!isMyTurn) return this._err('Nicht dein Zug!');
+        if (this.phase !== 'combat' && this.phase !== 'flee') return this._err('Nicht flüchten!');
         return this._flee(player, action.targetTile);
 
       // ── PHASE: Helfen ─────────────────────────────────────
@@ -608,12 +609,15 @@ class GameState {
     const hitCount = this.combat.monsters.length;
     [player, ...this.combat.helpers.map(h => this.players.find(p=>p.id===h.id)).filter(Boolean)]
       .forEach(p => { this._takeHit(p, hitCount); });
-    // Nicht getötet = fliehen
+    // Nicht getötet = fliehen; getötet = Respawn
     if (player.alive) {
       this.phase = 'flee';
-      return { ok: true, won: false, mustFlee: true, combat: this._getCombatState() };
+      this._log(`💨 ${player.name} muss fliehen!`);
+      this._event('must_flee', { playerId: player.id });
+      return { ok: true, won: false, mustFlee: true };
     } else {
       this.combat = null;
+      this._beginCharity(player);
       return { ok: true, won: false, died: true };
     }
   }
@@ -652,8 +656,11 @@ class GameState {
 
     // Monster bleiben auf dem Feld
     this.combat = null;
-    this.phase = 'movement'; // Weiterbewegen falls Marker vorhanden
-    if (player.movesLeft <= 0) this._beginCharity(player);
+    if (player.movesLeft > 0) {
+      this.phase = 'movement';
+    } else {
+      this._beginCharity(player);
+    }
 
     return { ok: true, success, roll, movesLeft: player.movesLeft };
   }
