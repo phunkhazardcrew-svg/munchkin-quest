@@ -241,7 +241,7 @@ class GameRoom {
       hasNPCs: Object.keys(this.npcControllers).length > 0,
     };
   }
-  isExpired() { return Date.now() - this.lastActivity > 4*60*60*1000; }
+  isExpired() { return Date.now() - this.lastActivity > 24*60*60*1000; }
 }
 
 module.exports = { GameRoom, NPC_PROFILES };
