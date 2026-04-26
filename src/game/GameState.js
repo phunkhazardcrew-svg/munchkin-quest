@@ -241,8 +241,14 @@ class GameState {
         if (!isMyTurn || this.phase !== 'combat') return this._err('Jetzt nicht!');
         return this._announceRoll(player);
 
-      case 'roll_combat':    // Würfeln ausführen
-        if (!isMyTurn || this.phase !== 'combat_roll') return this._err('Jetzt nicht!');
+      case 'roll_combat':    // Würfeln ausführen (combat + combat_roll Phase)
+        if (!isMyTurn) return this._err('Nicht dein Zug!');
+        if (this.phase !== 'combat_roll' && this.phase !== 'combat') return this._err('Kein aktiver Kampf!');
+        // Auto-announce falls noch nicht gesetzt
+        if (this.phase === 'combat' && this.combat) {
+          this.combat.announced = true;
+          this.phase = 'combat_roll';
+        }
         return this._rollCombat(player);
 
       // ── PHASE: Fliehen ────────────────────────────────────
@@ -523,7 +529,7 @@ class GameState {
     this._log(`🎲 ${player.name}: ${pBase}+${pRoll}=${pTotal} vs Monster: ${mTotal} → ${finalWin ? '✅ SIEG!' : '❌ Niederlage!'}`);
     this._event('combat_roll', {
       playerRolls: this.combat.playerRolls,
-      monsterRolls,
+      monsterRolls: monsterResults,
       playerTotal: pTotal,
       monsterTotal: mTotal,
       playerWins: finalWin,
