@@ -1071,6 +1071,12 @@ function showPhaseOverlay(phase) {
 
 // ── WÜRFEL-ANIMATION ──────────────────────────────────────────────
 function showDiceAnimation(data, onComplete) {
+  // Combat-Modal temporär ausblenden, damit Dice-Overlay sichtbar
+  const modal = document.getElementById('combat-modal');
+  if (modal && !modal.classList.contains('hidden')) {
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
   const overlay = document.getElementById('dice-overlay');
   if (!overlay) { if (onComplete) onComplete(); return; }
   const container = document.querySelector('.dice-container');
@@ -1130,7 +1136,11 @@ function showDiceAnimation(data, onComplete) {
     if (onComplete) onComplete();
   }, ANIM_ROLL + ANIM_HOLD);
 
-  setTimeout(() => overlay.classList.add('hidden'), TOTAL);
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    // Combat-Modal wieder einblenden
+    if (modal) { modal.style.opacity = ''; modal.style.pointerEvents = ''; }
+  }, TOTAL);
 }
 
 // ── FLUCHT-ANIMATION ──────────────────────────────────────────────
