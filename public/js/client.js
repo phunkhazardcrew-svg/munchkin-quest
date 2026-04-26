@@ -8,10 +8,27 @@
 const STATE = {
   socket: null, myId: null, roomCode: null, game: null,
   selectedCard: null, phase: '', dpr: window.devicePixelRatio || 1,
-  camera: { x: 0, y: 0, scale: 1.4 }, drag: { active: false, sx: 0, sy: 0 },
-  prevPhase: '', prevLevel: 1,
+  camera: { x: 0, y: 0, scale: 1.5 }, drag: { active: false, sx: 0, sy: 0 },
+  prevPhase: '', prevLevel: 1, _didAutoCenter: false,
+  _animFrame: null, _animNeeded: false, _animT: 0,
 };
-const TILE_PX = 88; // px pro Tile auf 1.0 zoom
+const TILE_PX = 96; // px pro Tile auf 1.0 zoom
+
+// ── Zentraler Animation-Loop (einmalig, kein Mehrfach-RAF) ────────
+function _startAnim() {
+  if (STATE._animFrame) return; // Bereits aktiv
+  function loop(t) {
+    STATE._animT = t;
+    if (!STATE._animNeeded || !STATE.game) { STATE._animFrame = null; return; }
+    _drawFrame(STATE.game);
+    STATE._animFrame = requestAnimationFrame(loop);
+  }
+  STATE._animFrame = requestAnimationFrame(loop);
+}
+function _stopAnim() {
+  if (STATE._animFrame) { cancelAnimationFrame(STATE._animFrame); STATE._animFrame = null; }
+  STATE._animNeeded = false;
+}
 
 // ── SETUP ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -220,7 +237,7 @@ function resizeCanvas() {
   canvas.height = r.height * STATE.dpr;
   canvas.style.width  = r.width  + 'px';
   canvas.style.height = r.height + 'px';
-  ctx.scale(STATE.dpr, STATE.dpr);
+  ctx.setTransform(STATE.dpr, 0, 0, STATE.dpr, 0, 0);
   if (STATE.game) renderGame(STATE.game);
 }
 
@@ -242,52 +259,12 @@ function tileToScreen(tx, ty) {
   return { x: cx + tx * sc, y: cy + ty * sc };
 }
 
-// ── HAUPT-RENDER ──────────────────────────────────────────────────
+// ── HAUPT-RENDER: UI + Canvas (einmalig pro Event) ────────────────
 function renderGame(g) {
-  if (!ctx || !canvas) return;
-  const wrap = document.getElementById('board-wrap');
-  const W = wrap.getBoundingClientRect().width;
-  const H = wrap.getBoundingClientRect().height;
-  ctx.clearRect(0, 0, W, H);
-  // Auto-Center auf Eingang wenn Karte noch fast leer
-  const tileCount = Object.keys(g?.board?.tiles || {}).length;
-  if (tileCount <= 2 && !STATE._didAutoCenter) {
-    STATE._didAutoCenter = true;
-    STATE.camera.x = 0;
-    STATE.camera.y = -30;
-  }
-
-  // Dungeon-Hintergrund
-  ctx.fillStyle = '#04040c';
-  ctx.fillRect(0, 0, W, H);
-
-  if (!g?.board?.tiles) return;
-
+  if (!g) return;
   const myPlayer = g.players.find(p => p.id === STATE.myId);
-  const sc = TILE_PX * STATE.camera.scale;
 
-  // Bestimme begehbare Tiles für Highlighting
-  const reachable = getReachableTiles(g, myPlayer);
-
-  // Tiles zeichnen
-  Object.values(g.board.tiles).forEach(tile => {
-    const s = tileToScreen(tile.x, tile.y);
-    drawTile(tile, s.x, s.y, sc, reachable.has(`${tile.x},${tile.y}`));
-  });
-
-  // Verbindungslinien zwischen Tiles
-  Object.values(g.board.tiles).forEach(tile => {
-    const dirs = { N:{dx:0,dy:-1}, S:{dx:0,dy:1}, E:{dx:1,dy:0}, W:{dx:-1,dy:0} };
-    (tile.exits || []).forEach(dir => {
-      const nb = g.board.tiles[`${tile.x+dirs[dir].dx},${tile.y+dirs[dir].dy}`];
-      if (nb) drawConnection(tile, nb, sc);
-    });
-  });
-
-  // Spieler zeichnen
-  g.players.forEach(p => drawPlayer(p, sc, p.id === STATE.myId));
-
-  // HUD & UI updaten
+  // UI-Elemente (DOM) - nur bei game_update
   updateHUD(g);
   updatePlayersBar(g);
   updateActionPanel(g, myPlayer);
@@ -295,12 +272,63 @@ function renderGame(g) {
   updateLog(g.log || []);
   if (g.log?.length) {
     const latest = g.log[g.log.length - 1]?.msg;
-    if (latest) document.getElementById('log-latest').textContent = latest;
+    if (latest) { const el = document.getElementById('log-latest'); if(el) el.textContent = latest; }
   }
-  // Kampf-Modal
   updateCombatModal(g, myPlayer);
-  // Gold anzeigen
-  if (myPlayer) document.getElementById('my-gold').textContent = myPlayer.gold || 0;
+  if (myPlayer) { const el = document.getElementById('my-gold'); if(el) el.textContent = myPlayer.gold || 0; }
+
+  // Canvas zeichnen + Animations-Loop steuern
+  STATE._animNeeded = false;
+  _drawFrame(g);
+  if (STATE._animNeeded) _startAnim();
+  else _stopAnim();
+}
+
+// ── CANVAS DRAW FRAME (sauber, EINMAL pro Frame) ──────────────────
+function _drawFrame(g) {
+  if (!ctx || !canvas) return;
+  const wrap = document.getElementById('board-wrap');
+  if (!wrap) return;
+  const W = wrap.getBoundingClientRect().width;
+  const H = wrap.getBoundingClientRect().height;
+
+  // ① Canvas physisch komplett leeren (DPR-unabhängig)
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#04040c';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  if (!g?.board?.tiles) return;
+
+  // ② Auto-Zentrierung beim ersten Render
+  if (Object.keys(g.board.tiles).length <= 2 && !STATE._didAutoCenter) {
+    STATE._didAutoCenter = true;
+    STATE.camera.x = 0; STATE.camera.y = -20;
+  }
+
+  const myPlayer = g.players.find(p => p.id === STATE.myId);
+  const sc = TILE_PX * STATE.camera.scale;
+  const reachable = getReachableTiles(g, myPlayer);
+  const dirs4 = { N:{dx:0,dy:-1}, S:{dx:0,dy:1}, E:{dx:1,dy:0}, W:{dx:-1,dy:0} };
+
+  // ③ Verbindungen (unterste Schicht)
+  Object.values(g.board.tiles).forEach(tile => {
+    (tile.exits || []).forEach(dir => {
+      const nb = g.board.tiles[`${tile.x+dirs4[dir].dx},${tile.y+dirs4[dir].dy}`];
+      if (nb) drawConnection(tile, nb, sc);
+    });
+  });
+
+  // ④ Tiles
+  Object.values(g.board.tiles).forEach(tile => {
+    const s = tileToScreen(tile.x, tile.y);
+    drawTile(tile, s.x, s.y, sc, reachable.has(`${tile.x},${tile.y}`));
+  });
+
+  // ⑤ Spieler (oberste Schicht)
+  g.players.forEach(p => drawPlayer(p, sc, p.id === STATE.myId));
 }
 
 // ── TILE ZEICHNEN ─────────────────────────────────────────────────
@@ -334,20 +362,20 @@ function drawTile(tile, cx, cy, sc, isReachable) {
 
   // Grüner Pulse-Rand für begehbar
   if (isReachable) {
-    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 300);
+    STATE._animNeeded = true; // Zentrale Animation Loop starten
+    const pulse = 0.7 + 0.3 * Math.sin(STATE._animT / 300);
     ctx.strokeStyle = `rgba(46,204,113,${pulse})`;
     ctx.lineWidth = 2.5;
     roundRect(ctx, cx - half + 2, cy - half + 2, sc * 0.96 - 4, sc * 0.96 - 4, r);
     ctx.stroke();
-    requestAnimationFrame(() => renderGame(STATE.game));
   }
 
   // Türen zeichnen (kleine Symbole an den Rändern)
   if (sc > 50) drawDoors(tile, cx, cy, sc);
 
   // Icon & Name
-  const fontSize = Math.max(10, sc * 0.28);
-  const nameFontSize = Math.max(8, sc * 0.1);
+  const fontSize = Math.max(12, Math.min(sc * 0.30, 32));
+  const nameFontSize = Math.max(8, Math.min(sc * 0.1, 12));
   ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4;
   ctx.font = `${fontSize}px serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -422,11 +450,13 @@ function drawPlayer(p, sc, isMe) {
   const total = allHere.length;
   // 2x2 Grid für mehrere Spieler
   const col = idx % 2, row = Math.floor(idx / 2);
-  const offsetX = total > 1 ? (col - 0.5) * sc * 0.38 : 0;
-  const offsetY = total > 2 ? (row - 0.5) * sc * 0.38 : 0;
+  // Engeres 2x2 Grid im unteren Tile-Bereich
+  const spread = Math.min(sc * 0.28, 24);
+  const offsetX = total > 1 ? (col === 0 ? -spread : spread) : 0;
+  const offsetY = total > 2 ? (row === 0 ? -spread * 0.5 : spread * 0.5) : 0;
   const px = s.x + offsetX;
   const py = s.y + offsetY - sc * 0.02;
-  const r = Math.max(10, sc * 0.18);
+  const r = Math.max(9, Math.min(sc * 0.16, 22)); // Max 22px, nicht zu groß
 
   ctx.save();
   ctx.shadowColor = isMe ? p.color : 'rgba(0,0,0,.5)';
@@ -516,7 +546,7 @@ function onTouchMove(e) {
   STATE.camera.y += e.touches[0].clientY - STATE.drag.sy;
   STATE.drag.sx = e.touches[0].clientX;
   STATE.drag.sy = e.touches[0].clientY;
-  if (STATE.game) renderGame(STATE.game);
+  if (STATE.game) _drawFrame(STATE.game); // Nur Canvas beim Dragging
 }
 function onTouchEnd(e) {
   if (!STATE.drag.active && Date.now() - _touchStartTime < 400) {
@@ -541,7 +571,7 @@ function onMouseMove(e) {
   STATE.drag.active = true;
   STATE.camera.x += dx; STATE.camera.y += dy;
   STATE.drag.sx = e.clientX; STATE.drag.sy = e.clientY;
-  if (STATE.game) renderGame(STATE.game);
+  if (STATE.game) _drawFrame(STATE.game); // Nur Canvas, keine UI-Updates
 }
 function onMouseUp(e) { _mouseDown = false; STATE.drag.active = false; }
 
