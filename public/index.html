@@ -3,48 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <title>🎲 Munchkin Quest</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<!-- ══ HOME ════════════════════════════════════════ -->
+<!-- ══ HOME ══════════════════════════════════════════════ -->
 <div id="screen-home" class="screen active">
-  <div class="logo">🎲</div>
-  <h1>Munchkin Quest</h1>
-  <p class="subtitle">Online · 2–6 Spieler</p>
-  <div class="card">
-    <input id="inp-name" type="text" maxlength="20" placeholder="Heldenname..." autocomplete="off">
-    <button id="btn-create" class="btn btn-primary">⚔️ Dungeon erstellen</button>
-    <div class="divider">— oder beitreten —</div>
-    <input id="inp-code" type="text" maxlength="6" placeholder="Raumcode..." autocomplete="off" style="text-transform:uppercase;letter-spacing:4px">
-    <button id="btn-join" class="btn btn-secondary">🚪 Beitreten</button>
+  <div class="home-bg"></div>
+  <div class="home-content">
+    <div class="game-logo">
+      <div class="logo-dice" id="logo-dice">🎲</div>
+      <h1 class="game-title">MUNCHKIN QUEST</h1>
+      <p class="game-sub">Töte die Monster · Schnapp dir die Schätze · Erstich deine Kumpel</p>
+    </div>
+    <div class="home-card">
+      <input id="inp-name" type="text" maxlength="20" placeholder="Dein Heldenname..." autocomplete="off">
+      <button id="btn-create" class="btn btn-primary">⚔️ Dungeon erstellen</button>
+      <div class="divider">— oder beitreten —</div>
+      <input id="inp-code" type="text" maxlength="6" placeholder="Raumcode..." autocomplete="off" style="text-transform:uppercase;letter-spacing:5px;text-align:center">
+      <button id="btn-join" class="btn btn-secondary">🚪 Beitreten</button>
+    </div>
+    <div id="home-error" class="error-msg hidden"></div>
   </div>
-  <div id="home-error" class="error-msg hidden"></div>
 </div>
 
-<!-- ══ LOBBY ═══════════════════════════════════════ -->
+<!-- ══ LOBBY ═════════════════════════════════════════════ -->
 <div id="screen-lobby" class="screen">
   <div class="lobby-header">
-    <h2 style="font-size:16px">🏰 Lobby</h2>
+    <div>
+      <h2>🏰 Wartehalle</h2>
+      <p style="font-size:12px;color:var(--muted)">Warte auf Spieler...</p>
+    </div>
     <div class="room-code-box">
-      <span style="font-size:11px;color:var(--muted)">Code:</span>
-      <strong id="lbl-code">—</strong>
-      <button id="btn-copy-link" class="btn-icon">🔗</button>
+      <span class="code-label">Code</span>
+      <span id="lbl-code" class="code-val">——</span>
+      <button id="btn-copy-link" class="icon-btn" title="Link kopieren">🔗</button>
     </div>
   </div>
-  <div id="lobby-players" class="player-list"></div>
-  <div id="lobby-status" class="status-msg">Warte auf Spieler...</div>
-  <div id="dev-mode-box" class="dev-box hidden">
-    <div class="dev-title">🤖 Dev-Modus — Solo testen</div>
-    <div class="npc-preview">
-      <span class="npc-tag">🧙 Aldric <em>Strategisch</em></span>
-      <span class="npc-tag">⚔️ Zara <em>Strategisch</em></span>
-      <span class="npc-tag">🎲 Glitch <em>Zufällig</em></span>
+  <div id="lobby-players" class="lobby-player-list"></div>
+  <div id="lobby-status" class="lobby-status">Warte auf Spieler...</div>
+  <div id="dev-box" class="dev-box hidden">
+    <div class="dev-title">🤖 Entwickler-Modus</div>
+    <div class="dev-npcs">
+      <span class="npc-badge">🧙 Aldric Strategisch</span>
+      <span class="npc-badge">⚔️ Zara Strategisch</span>
+      <span class="npc-badge">🎲 Glitch Zufällig</span>
     </div>
-    <button id="btn-add-npcs" class="btn btn-dev">🤖 3 NPCs hinzufügen</button>
+    <button id="btn-add-npcs" class="btn btn-dev">🤖 NPCs hinzufügen</button>
   </div>
   <div class="lobby-actions">
     <button id="btn-start" class="btn btn-primary hidden">🎮 Spiel starten!</button>
@@ -52,69 +58,111 @@
   <div id="lobby-error" class="error-msg hidden"></div>
 </div>
 
-<!-- ══ GAME ════════════════════════════════════════ -->
+<!-- ══ GAME ══════════════════════════════════════════════ -->
 <div id="screen-game" class="screen">
 
-  <!-- Row 1: HUD -->
-  <div id="hud-bar" class="phase-roll">
-    <span id="hud-phase">🎲 Würfeln</span>
-    <span id="hud-current">—</span>
-    <span id="hud-round">R1</span>
-  </div>
-
-  <!-- Row 2: Board -->
-  <div id="board-wrap">
-    <canvas id="dungeon-canvas"></canvas>
-    <div id="board-hint">🏃 Tippe auf grüne Felder zum Bewegen</div>
-    <div id="npc-overlay">🤖 KI denkt nach...</div>
-  </div>
-
-  <!-- Row 3: Bottom Panel -->
-  <div id="bottom-panel">
-    <div id="players-bar"></div>
-    <div id="action-buttons"></div>
-    <div id="hand-wrap">
-      <div class="hand-header">
-        <span class="hand-label">🃏 Hand (<span id="hand-count">0</span>)</span>
-        <button id="hand-toggle">▼</button>
-      </div>
-      <div id="hand-cards"></div>
+  <!-- Phase-Transition-Overlay -->
+  <div id="phase-overlay" class="phase-overlay hidden">
+    <div class="phase-overlay-inner">
+      <div id="phase-overlay-icon" class="phase-ov-icon">🎲</div>
+      <div id="phase-overlay-text" class="phase-ov-text">Würfeln</div>
     </div>
   </div>
 
-  <!-- Row 4: Log-Strip -->
-  <div id="log-strip">
-    <span>📜</span>
-    <span id="log-latest">—</span>
-    <button id="log-toggle">Alle</button>
+  <!-- HUD -->
+  <div id="hud" class="hud">
+    <div id="hud-phase" class="hud-phase">🎲 Würfeln</div>
+    <div id="hud-current" class="hud-current">—</div>
+    <div id="hud-round" class="hud-round">R1</div>
   </div>
 
-  <!-- Full Log Panel (slide-up) -->
-  <div id="log-panel">
-    <button id="log-close">✕ Schließen</button>
+  <!-- Board Canvas -->
+  <div id="board-wrap">
+    <canvas id="dungeon-canvas"></canvas>
+    <div id="board-hint" class="board-hint">🏃 Grüne Felder = begehbar | Tippen zum Bewegen</div>
+    <div id="npc-label" class="npc-label hidden">🤖 KI denkt nach...</div>
+    <!-- Würfel-Animation Overlay -->
+    <div id="dice-overlay" class="dice-overlay hidden">
+      <div class="dice-container">
+        <div id="dice-a" class="dice">?</div>
+        <div id="dice-plus" class="dice-plus">+</div>
+        <div id="dice-b" class="dice">?</div>
+        <div id="dice-result-line"></div>
+      </div>
+      <div id="dice-verdict" class="dice-verdict"></div>
+    </div>
+  </div>
+
+  <!-- Spieler-Chips -->
+  <div id="players-bar"></div>
+
+  <!-- Aktions-Panel -->
+  <div id="action-panel">
+    <div id="action-buttons"></div>
+    <div id="hand-header">
+      <span class="hand-label">🃏 Handkarten (<span id="hand-count">0</span>)</span>
+      <div id="gold-display">💰 <span id="my-gold">300</span></div>
+      <button id="hand-toggle-btn">▼</button>
+    </div>
+    <div id="hand-cards"></div>
+  </div>
+
+  <!-- Log-Strip -->
+  <div id="log-strip">
+    <span>📜</span>
+    <span id="log-latest" class="log-latest-text">—</span>
+    <button id="log-toggle-btn" class="log-toggle-btn">Alle</button>
+  </div>
+
+  <!-- Full Log -->
+  <div id="log-panel" class="log-panel">
+    <button id="log-close-btn">✕ Schließen</button>
     <div id="log-entries"></div>
   </div>
 
-  <!-- Combat Modal -->
+  <!-- Kampf-Modal -->
   <div id="combat-modal" class="modal hidden">
-    <div class="modal-sheet">
-      <div class="cbt-handle"></div>
-      <div id="cbt-title">⚔️ Kampf!</div>
-      <div id="cbt-monster"></div>
-      <div id="cbt-vs"></div>
-      <div id="cbt-helpers"></div>
-      <div id="cbt-buttons"></div>
+    <div class="modal-sheet combat-sheet">
+      <div class="modal-handle"></div>
+      <div id="cbt-header" class="cbt-header"><div id="cbt-title" class="cbt-title">⚔️ Kampf!</div>
+        <span id="cbt-announce-badge" class="cbt-badge">⚔️ Kampf!</span>
+        <span id="cbt-timer" class="cbt-timer hidden">2.6s</span>
+      </div>
+      <div id="cbt-monsters" class="cbt-monsters"></div>
+      <div id="cbt-vs-bar" class="cbt-vs-bar">
+        <div class="vs-side player-side">
+          <div id="cbt-player-emoji" class="vs-icon">👤</div>
+          <div id="cbt-player-str" class="vs-str player-str">?</div>
+          <div class="vs-label">Held</div>
+        </div>
+        <div class="vs-center">VS</div>
+        <div class="vs-side monster-side">
+          <div id="cbt-monster-emoji" class="vs-icon">👹</div>
+          <div id="cbt-monster-str" class="vs-str monster-str">?</div>
+          <div class="vs-label">Monster</div>
+        </div>
+      </div>
+      <div id="cbt-details" class="cbt-details"></div>
+      <div id="cbt-helpers" class="cbt-helpers"></div><div id="cbt-buttons" class="cbt-buttons"></div>
+    </div>
+  </div>
+
+  <!-- Level-Up-Overlay -->
+  <div id="levelup-overlay" class="levelup-overlay hidden">
+    <div class="levelup-content">
+      <div class="levelup-star">⭐</div>
+      <div class="levelup-text">STUFE <span id="levelup-num">2</span>!</div>
     </div>
   </div>
 
 </div>
 
-<!-- ══ WINNER ══════════════════════════════════════ -->
+<!-- ══ WINNER ════════════════════════════════════════════ -->
 <div id="screen-winner" class="screen">
-  <div class="winner-content">
-    <div style="font-size:72px">🏆</div>
-    <h1 id="winner-name">— gewinnt!</h1>
-    <p>Stufe 10 erreicht — Dungeon bezwungen!</p>
+  <div class="winner-scene">
+    <div class="winner-trophy">🏆</div>
+    <h1 id="winner-name" class="winner-name">— gewinnt!</h1>
+    <p class="winner-sub">Stufe 10 · Boss besiegt · Dungeon bezwungen!</p>
     <button id="btn-new-game" class="btn btn-primary">🎲 Neues Spiel</button>
   </div>
 </div>
