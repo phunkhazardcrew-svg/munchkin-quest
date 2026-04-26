@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupLogUI();
   setupCanvas();
   window.addEventListener('resize', resizeCanvas);
+  // Auto-Reconnect nach kurzer Verzögerung (Socket muss bereit sein)
+  setTimeout(tryAutoReconnect, 800);
 });
 
 // ── SOCKET ────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ function setupSocket() {
 
   s.on('room_created', ({ code, lobbyState }) => {
     STATE.roomCode = code;
+    saveSession(code, document.getElementById('inp-name')?.value?.trim() || '');
     showScreen('lobby');
     document.getElementById('lbl-code').textContent = code;
     updateLobby(lobbyState);
@@ -59,11 +62,14 @@ function setupSocket() {
     if (btnStart) btnStart.classList.remove('hidden');
   });
 
-  s.on('room_joined', ({ code, lobbyState }) => {
+  s.on('room_joined', ({ code, lobbyState, reconnected }) => {
     STATE.roomCode = code;
+    const name = document.getElementById('inp-name')?.value?.trim() || sessionStorage.getItem('mq_name') || '';
+    saveSession(code, name);
     showScreen('lobby');
     document.getElementById('lbl-code').textContent = code;
     updateLobby(lobbyState);
+    if (reconnected) toast('🔄 Wieder verbunden!', 'success');
   });
 
   s.on('lobby_update', lobbyState => updateLobby(lobbyState));
@@ -71,10 +77,20 @@ function setupSocket() {
   s.on('game_started', () => {
     showScreen('game');
     resizeCanvas();
-    // Kamera auf Eingang zentrieren
-    STATE.camera.x = 0;
-    STATE.camera.y = 0;
-    STATE.camera.scale = 1.4;
+    STATE.camera.x = 0; STATE.camera.y = 0; STATE.camera.scale = 1.4;
+    startKeepAlive();
+  });
+  s.on('game_restarted', () => {
+    showScreen('lobby');
+    toast('🔄 Spiel wurde neu gestartet', 'info');
+    const room = rooms.get ? null : STATE.roomCode;
+    const ls = STATE.game;
+    STATE.game = null;
+  });
+  s.on('rejoin_failed', ({ message } = {}) => {
+    clearSession();
+    toast(message || 'Reconnect fehlgeschlagen', 'error');
+    showScreen('home');
   });
 
   s.on('game_update', gameState => {
@@ -658,6 +674,12 @@ function updateHUD(g) {
 function updatePlayersBar(g) {
   const bar = document.getElementById('players-bar');
   if (!bar) return;
+  // Neustart-Button für Host anzeigen
+  const me = g.players?.find(p => p.id === STATE.myId);
+  const isHost = g.host === STATE.myId || 
+                 (g.players && g.players[0]?.id === STATE.myId && !g.players[0]?.id?.startsWith('npc'));
+  // Vereinfacht: ersten nicht-NPC Spieler als Host behandeln
+  showRestartButton(me && !me.id?.startsWith('npc'));
   bar.innerHTML = g.players.map(p => {
     const isActive = p.id === g.currentPlayerId;
     const isMe = p.id === STATE.myId;
@@ -1247,4 +1269,86 @@ function showBossIntro(boss) {
   document.body.appendChild(el);
   el.onclick = () => el.remove();
   setTimeout(() => el.remove(), 3500);
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// SESSION PERSISTENZ & RECONNECT
+// ══════════════════════════════════════════════════════════════════
+function saveSession(code, name) {
+  try {
+    sessionStorage.setItem('mq_room', code);
+    sessionStorage.setItem('mq_name', name);
+    sessionStorage.setItem('mq_ts',   Date.now());
+  } catch(e) {}
+}
+function loadSession() {
+  try {
+    const code = sessionStorage.getItem('mq_room');
+    const name = sessionStorage.getItem('mq_name');
+    const ts   = parseInt(sessionStorage.getItem('mq_ts') || '0');
+    if (code && name && Date.now() - ts < 24 * 60 * 60 * 1000) return { code, name };
+  } catch(e) {}
+  return null;
+}
+function clearSession() {
+  try { sessionStorage.removeItem('mq_room'); sessionStorage.removeItem('mq_name'); } catch(e) {}
+}
+
+// Auto-Reconnect beim Laden der Seite
+function tryAutoReconnect() {
+  const session = loadSession();
+  if (!session) return false;
+  // Felder vorausfüllen
+  const nameEl = document.getElementById('inp-name');
+  const codeEl = document.getElementById('inp-code');
+  if (nameEl) nameEl.value = session.name;
+  if (codeEl) codeEl.value = session.code;
+  // Reconnect versuchen
+  console.log('🔄 Auto-Reconnect:', session.code, session.name);
+  STATE.socket.emit('rejoin_room', { roomCode: session.code, playerName: session.name });
+  return true;
+}
+
+// Keep-Alive: verhindert Render.com-Hibernation und Server-Disconnect
+let _keepAliveInterval;
+function startKeepAlive() {
+  clearInterval(_keepAliveInterval);
+  _keepAliveInterval = setInterval(() => {
+    STATE.socket?.emit('keep_alive');
+    // Auch HTTP-Ping gegen Render.com-Hibernation
+    fetch('/').catch(() => {});
+  }, 25000); // alle 25 Sekunden
+}
+
+// Sichtbarkeitswechsel: Reconnect wenn Tab wieder aktiv
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && STATE.socket) {
+    if (!STATE.socket.connected) {
+      STATE.socket.connect();
+      setTimeout(() => {
+        const session = loadSession();
+        if (session && STATE.roomCode) {
+          STATE.socket.emit('rejoin_room', { roomCode: session.code, playerName: session.name });
+        }
+      }, 1000);
+    }
+  }
+});
+
+// Neustart-Button (Host-Only)
+function showRestartButton(isHost) {
+  const existing = document.getElementById('btn-restart');
+  if (!isHost || existing) return;
+  const btn = document.createElement('button');
+  btn.id = 'btn-restart';
+  btn.className = 'act-btn primary';
+  btn.style.cssText = 'position:fixed;bottom:36px;right:12px;z-index:100;width:auto;padding:8px 14px;font-size:12px;opacity:.7';
+  btn.textContent = '🔄 Neustart';
+  btn.onclick = () => {
+    if (confirm('❓ Wirklich neu starten? Das aktuelle Spiel wird beendet!')) {
+      STATE.socket.emit('restart_game', { confirmed: true });
+    }
+  };
+  document.body.appendChild(btn);
 }
